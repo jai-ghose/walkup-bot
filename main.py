@@ -9,6 +9,8 @@ import asyncio
 
 import youtube_dl
 
+walkup_timeout = 60
+
 ytdl_format_options = {
     'format': 'bestaudio/best',
     'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
@@ -24,7 +26,7 @@ ytdl_format_options = {
 }
 
 ffmpeg_options = {
-    'options': '-vn'
+    'options': f'-vn -t {walkup_timeout}'
 }
 
 ytdl = youtube_dl.YoutubeDL(ytdl_format_options)
@@ -79,16 +81,14 @@ def get_general(member):
         general_channel = list(filter(lambda x: x.name == "general", bot.get_all_channels()))
         general = general_channel[0] if general_channel is not None else None
 
-
 async def play_song(url, voice_channel):
     global general
-    await general.send(f"Playing a song {url}")
+    await general.send(f"▶️ {url}")
 
-    connxn = await voice_channel.connect()
-    ## what if we're already connected?
+    connxn = await voice_channel.connect(timeout=walkup_timeout)
     player = await YTDLSource.from_url(url, loop=connxn.loop, stream=True)
-    ## play for 30 seconds/set some timeout...
     connxn.play(player, after=lambda e: print('Player error: %s' % e) if e else None)
+    await connxn.disconnect()
 
 
 @bot.event
@@ -101,15 +101,13 @@ async def on_voice_state_update(member, before, after):
         else:
             old_time = dt.datetime.strptime(old_time, "%Y-%m-%dT%H:%M:%S")
             now = dt.datetime.now()
-            if now - old_time > dt.timedelta(minutes=30):
+            if now - old_time > dt.timedelta(seconds=1):
                 play = True
         new_time = r.set(f"{member.id}_timestamp", dt.datetime.now().replace(microsecond=0).isoformat())
         song = r.get(member.id)
         get_general(member)
         global general
-        if song is None:
-            await general.send("Add a walkup song:\n$walkup-set https://www.youtube.com/watch?v=D7Y-nhksmcY")
-        elif play:
+        if play:
             await play_song(song, after.channel)
     else:
         return
